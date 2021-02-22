@@ -1,3 +1,4 @@
+import { Client } from './client/interfaces/Client';
 import { HttpClient } from './HttpClient';
 import { parse as parseV2 } from './openApi/v2';
 import { parse as parseV3 } from './openApi/v3';
@@ -22,6 +23,7 @@ export type Options = {
     exportSchemas?: boolean;
     request?: string;
     write?: boolean;
+    returnClient?: boolean;
 };
 
 /**
@@ -39,6 +41,7 @@ export type Options = {
  * @param exportSchemas: Generate schemas
  * @param request: Path to custom request file
  * @param write Write the files to disk (true or false)
+ * @param returnClient Returns the client object
  */
 export async function generate({
     input,
@@ -52,30 +55,37 @@ export async function generate({
     exportSchemas = false,
     request,
     write = true,
-}: Options): Promise<void> {
+    returnClient = false,
+}: Options): Promise<void | Client> {
     const openApi = isString(input) ? await getOpenApiSpec(input) : input;
     const openApiVersion = getOpenApiVersion(openApi);
-    const templates = registerHandlebarTemplates({
-        httpClient,
-        useUnionTypes,
-        useOptions,
-    });
+    let client: Client | undefined = undefined;
 
     switch (openApiVersion) {
         case OpenApiVersion.V2: {
-            const client = parseV2(openApi);
-            const clientFinal = postProcessClient(client);
-            if (!write) break;
-            await writeClient(clientFinal, templates, output, httpClient, useOptions, useUnionTypes, exportCore, exportServices, exportModels, exportSchemas, request);
+            const parsedClient = parseV2(openApi);
+            client = postProcessClient(parsedClient);
             break;
         }
 
         case OpenApiVersion.V3: {
-            const client = parseV3(openApi);
-            const clientFinal = postProcessClient(client);
-            if (!write) break;
-            await writeClient(clientFinal, templates, output, httpClient, useOptions, useUnionTypes, exportCore, exportServices, exportModels, exportSchemas, request);
+            const parsedClient = parseV3(openApi);
+            client = postProcessClient(parsedClient);
             break;
         }
+    }
+
+    if (write) {
+        const templates = registerHandlebarTemplates({
+            httpClient,
+            useUnionTypes,
+            useOptions,
+        });
+
+        await writeClient(client, templates, output, httpClient, useOptions, useUnionTypes, exportCore, exportServices, exportModels, exportSchemas, request);
+    }
+
+    if (returnClient) {
+        return client;
     }
 }
